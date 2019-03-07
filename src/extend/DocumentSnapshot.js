@@ -6,7 +6,7 @@ export const documentSnapshot = {
         data(oldFn){
             let data = oldFn.call(this)
             const path = this.ref.path 
-            const schema = firestorePlusInstance._getSchemaByPath(path)
+            const schema = firestorePlusInstance.getSchemaByPath(path)
             if(!schema){
                 return data
             }

@@ -10,12 +10,23 @@
     "yup": "^0.26.10"
   },
   "scripts": {
-    "test": "babel-node ./test.js"
+    "start": "babel-node ./test.js",
+    "test": "mocha --require babel-polyfill --require @babel/register"
   },
   "devDependencies": {
     "@babel/core": "^7.3.4",
     "@babel/node": "^7.2.2",
     "@babel/preset-env": "^7.3.4",
-    "firebase": "^5.8.5"
+    "babel-polyfill": "^6.26.0",
+    "chai": "^4.2.0",
+    "chai-sinon": "^2.8.1",
+    "firebase": "^5.8.5",
+    "firebase-admin": "^7.0.0",
+    "firebase-server": "^1.0.1",
+    "husky": "^1.3.1",
+    "mocha": "^6.0.2",
+    "precommit": "^1.2.2",
+    "sinon": "^7.2.7",
+    "sinon-chai": "^3.3.0"
   }
 }

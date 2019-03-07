@@ -31,12 +31,14 @@ export default class FirestorePlus {
             throw `Path must string or array of strings`
         }
         this._schema[arrayOrString] = schemaOrObject
+        return schemaOrObject
     }
+
     /**
      * 
      * @param {string} path 
      */
-    _getSchemaByPath(path){
+    getSchemaByPath(path){
         let schema = null,
             params = {}
         path = path.split(/\\|\//g).filter(Boolean).slice(0,-1)
@@ -46,7 +48,6 @@ export default class FirestorePlus {
             if(path.length !== key.length){
                 continue
             }
-            // console.log(path, key)
             let i = key.length - 1
             while(--i >= 0){
                 // check for equivalency and wildcards
@@ -60,14 +61,12 @@ export default class FirestorePlus {
         }
         return schema
     }
-    
-    // _onForwardProperty(prop, type){
-    //     // console.log(`[${type}] ${prop}`)
-    // }
-
+    /**
+     * Adds all necessary functions and methods to the passed in
+     * instance of firebase. Honestly, don't try to read this b/c 
+     * it's a mess.
+     */
     _init(){
-        const oldSnapFn = this.firebase.firestore.DocumentSnapshot.prototype.data
-        const that = this
         for(let key in extensions){
             let targets = extensions[key]
             for(let path in targets){
@@ -81,7 +80,6 @@ export default class FirestorePlus {
                 for(let prop in exts){
                     let oldVal = target[prop],
                         newVal = exts[prop]
-                    console.log(oldVal)
                     if(typeof oldVal === 'function' && typeof newVal === 'function'){
                         // Try to keep the value of `this` bound
                         target[prop] = function(...args){ return newVal.call(this, oldVal, ...args) }
@@ -91,15 +89,5 @@ export default class FirestorePlus {
                 }
             }
         }
-        // // TODO: Automatically extend all the required functions/methods
-        // this.firebase.firestore.DocumentSnapshot.prototype.data = function(){
-        //     let data = oldSnapFn.call(this)
-        //     const path = this.ref.path 
-        //     const schema = that._getSchemaByPath(path)
-        //     if(!schema){
-        //         return data
-        //     }
-        //     return schema.validate(data, {strict : true})
-        // }
     }
 }
