@@ -7,11 +7,19 @@ export default class FirestorePlus {
      * @param {firebase} firebase 
      */
     constructor(firebase){
+        if(!firebase || typeof firebase.firestore !== 'function'){
+            throw new TypeError('firebase instance with firestore enabled is required')
+        }
         this.firebase = firebase
         this.firestore = firebase.firestore()
         this._schema = {}
-        // 
         this._init()
+    }
+
+    static isSchema(obj){
+        return obj !== null 
+            && typeof obj !== 'undefined' 
+            && obj.__is_firestore_plus_schema__ === true
     }
 
     /**
@@ -19,8 +27,16 @@ export default class FirestorePlus {
      * @param {Object} schemaOrObject 
      */
     model(arrayOrString, schemaOrObject){
+        if(!schemaOrObject || !arrayOrString){
+            throw new TypeError(`path(s) and schema definition required but recieved [${
+                Array.from(arguments).map(el=>typeof el).join()
+            }]`)
+        }
         // first resolve the schema
-        if(!(schemaOrObject && schemaOrObject.__is_firestore_plus_schema__ === true)){
+        if(!FirestorePlus.isSchema(schemaOrObject)){
+            if(typeof schemaOrObject === 'function'){
+                throw new TypeError('schema should inherit from Schema class')
+            }
             schemaOrObject = SchemaBuilder(schemaOrObject)
         }
         if(arrayOrString instanceof Array){
@@ -81,8 +97,15 @@ export default class FirestorePlus {
                     let oldVal = target[prop],
                         newVal = exts[prop]
                     if(typeof oldVal === 'function' && typeof newVal === 'function'){
+                        // Get 
+                        if(oldVal.__is_firestore_plus_stubbed === true){
+                            oldVal = oldVal.__firestore_plus_stubbed_function
+                        }
                         // Try to keep the value of `this` bound
-                        target[prop] = function(...args){ return newVal.call(this, oldVal, ...args) }
+                        function stub (...args){ return newVal.call(this, oldVal, ...args) }
+                        stub.__is_firestore_plus_stubbed = true
+                        stub.__firestore_plus_stubbed_function = oldVal
+                        target[prop] = stub
                     }else {
                         target[prop] = newVal
                     }

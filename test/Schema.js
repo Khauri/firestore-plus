@@ -1,15 +1,11 @@
 import { assert, expect, use } from 'chai'
 import sinonChai from 'sinon-chai'
 import { stub, spy, createSandbox, SinonSandbox, SinonStub, SinonSpy, SinonMock } from 'sinon'
-import firebase from 'firebase'
-
-firebase.initializeApp({
-    projectId : 'not-a-project'
-})
+import { client as firebase, admin } from './firebase'
 
 // Stub DocumentSnapshot so that it returns the first argument passed to it
 // This needs to be done before FireStorePlus is initialized
-const DataStub = stub(firebase.firestore.DocumentSnapshot.prototype, 'data')
+const documentSnapshotDataStub = stub(firebase.firestore.DocumentSnapshot.prototype, 'data')
     
 
 import FirestorePlus, { Schema, FieldTypes } from '../src'
@@ -48,6 +44,26 @@ const createDocumentSnapshot = (path, data) => {
     }
 }
 
+/**
+ * Calls the DocumentSnapshat.data function 
+ * and returns the array [result, data]
+ * @param {*} path 
+ * @param {*} data 
+ * @returns {[any, any]} 
+ */
+function callData(path='test/path', data = { number : 0, string : 'hello', array : [] }){
+    // Trigger DataStub to return passed in data
+    documentSnapshotDataStub.returns(data)
+    const result = firebase
+        .firestore
+        .DocumentSnapshot
+        .prototype
+        .data
+        .call(createDocumentSnapshot(path, data))
+    // Make function call
+    return [ result, data ]
+}
+
 beforeEach(function(){
     this.sandbox = createSandbox()
 })
@@ -60,72 +76,41 @@ describe('Schema Tests', function(){
     /**
      * Expects firestorePlus and schema
      */
-    function shouldBehaveLikeSchema(){
+    beforeEach(function(){
+        this.firestorePlus = new FirestorePlus(firebase)
+        const schema = {}
+        this.schemas = {
+            collection : this.firestorePlus.model('test', schema),
+            subcollection : this.firestorePlus.model('test/:subcollection/test', schema)
+        }
+    })
 
-        beforeEach(function(){
-            this.schemas = {
-                collection : this.firestorePlus.model('test', this.schema),
-                subcollection : this.firestorePlus.model('test/:subcollection/test', this.schema)
-            }
-        })
-
-        it("should be instance of schema", function(){
-            for(let schema in this.schemas){
-                assert.isTrue(Schema.isPrototypeOf(this.schemas[schema]))
-            }
-        })
-
-        it("__is_firestore_plus_schema__ is true", function(){
-            assert.isTrue(this.schemas.collection.__is_firestore_plus_schema__)
-        })
-
-        it("should validate", async function(){
+    describe(".validate", function(){
+        it("should be called when DocumentSnapshot#data called", async function(){
             /** @type {SinonSandbox} */
             const sandbox = this.sandbox
-            // TODO: Add these to a separate file(?)
-            const path = 'test/testPath'
-
-            const data = {
-                test : 'data'
-            }
             // Spy on the validate function
             const spy = sandbox.spy(Schema, 'validate')
-            DataStub.returns(data)
+            
             // Trigger DocumentSnapshot data call
-            const result = firebase
-                .firestore
-                .DocumentSnapshot
-                .prototype
-                .data
-                .call(createDocumentSnapshot(path, data))
+            const [result, data] = callData()
 
             assert.deepEqual(result, data)
             // TODO: This is called an insane amount of times for some reason
-            // I'm not sure if it's just the test though
-            expect(spy).to.have.been.called
+            expect(spy).to.have.been.calledOnce
         })
-    }
 
-    beforeEach(function(){
-        console.log("Refreshing")
-        this.firestorePlus = new FirestorePlus(firebase)
-    })
+        it("should call pre and post validate hooks", function(){
+            /** @type {SinonSandbox} */
+            const sandbox = this.sandbox
+            // Spy on the validate function
+            const preSpy = sandbox.spy(Schema, 'preValidate')
+            const postSpy = sandbox.spy(Schema, 'postValidate')
 
-    context('using class construction', function(){
-        beforeEach(function(){
-            this.schema = class extends Schema {
+            callData()
 
-            }
+            expect(preSpy).to.have.been.calledOnce
+            expect(postSpy).to.have.been.calledOnce
         })
-        shouldBehaveLikeSchema()
-    })
-
-    context('using object construction', function(){
-        beforeEach(function(){
-            this.schema = {
-                fields : {},
-            }
-        })
-        shouldBehaveLikeSchema()
     })
 })
