@@ -1,128 +1,88 @@
-# firestore-plus
+# Firestore+
 
-This repository is a proposal (and eventually an implementation) of plugins for cloud firestore that extends its usage with some common or missing functionality.
+```bash
+npm install --save `firebase-plus`
+```
 
-## Reasoning
+Firestore+ is an unofficial extension to firebase that adds features such as schema validation, optional deep population (soon), plugins, and more(?)
 
-Firestore works well as a complete backend solution, but it lacks the user extensibility necessary to make it easy to rapidly implement new features without too much hastle. 
+Warning: This package is experimental and still in alpha testing. It's only currently tested with `firebase@^5.8.5`
 
-## API
+## Installation
 
-### Initializing Firestore Plus
+```bash
+npm install --save 'firebase-plus'
+# or 
+yarn add 'firebase-plus'
+```
+
+If you're using schema validation, you might also want to install yup.
+Using a custom validator is a feature coming soon.
+
+## Usage
+
+This package mainly works by wrapping existing firestore components such as DocumentReference.
+
+See the wiki for full(er) documenation
+
+### TODO Before 1.0.0 release
+
+- Custom Validator
+
+- Add plugin interface. The interface should have a way of specifying what native firebase objects to extend.
+
+- Create better way to wrap and extend firestore components. Perhaps by adding a function that wraps a component and adds a chain of functions. Here's an idea:
 
 ```js
-import * as firebase from 'firebase/app'
-import 'firebase/firestore'
+const key = '__firestore_plus__'
+const wrap = (target, prop, cb) => {
+    let fn = target[prop]
+    if(!fn[key]){
+        const original = fn
+        const queue = []
+        fn = function(){
+            const valToReturn = null
+            queue.forEach(fn => {
+                fn.apply(this, arguments)
+            })
+        }
+        fn['queue'] = queue
+        fn[key] = true
+    }
+    fn.queue.push(cb)
+}
+```
+
+- Add `plus` function to firebase.firestore instance that returns firestore+ instance if called with empty parameter and extends firestore if called with a plugin
+
+```js
 import FirestorePlus from 'firestore-plus'
 
-// Initialize the Firebase SDK
-firebase.initializeApp({
-  // ...
-})
+// Initialize
+const instance = FirestorePlus(firebase)
 
-// Create a firestore reference
-const firestore = firebase.firestore()
+// get instance of firestore plus
+const instance = firebase.firestore().plus()
 
-// Create a FirestorePlus instance
-const firestorePlus = new FirestorePlus(firestore)
+// add a plugin
+firebase.firestore().plus(plugin)
+
+// Add an alias for thee plugn
+firebase.firestore().plus(plugin, 'myPlugin')
+
+// retrieve a plugin
+firebase.firestore().plus().myPlugin
+
+// Add multiple named plugins at once
+// This pattern should be useful for 
+firebase.firestore().plus({plugin1, plugin2, plugin3})
+
 ```
 
-### Using a plugin
+- Extrapolate schema into a plugin library
 
 ```js
-import FirestoreCommentsPlugin from 'firestore-plus-comments'
-
-// Add the plugin
-const settings = {
-  collection : 'comments'
-}
-firestorePlus.use(new FirestoreCommentsPlugin(settings))
-
-// Ex: Create a comment and retreive a special comment document reference
-const comment = await firestorePlus.comments.create(...data)
-
-// Do something with the comment
-comment.delete()
+import { plugins } from 'firestore-plus'
+// 
+firebase.firestore().plus(plugins.schema)
 ```
-
-
-### Schema
-
-Firestore is schemaless, but that doesn't mean you can't use a schema.
-
-**Create a Schema**
-
-```js
-import { DocumentSchema, FieldTypes } from 'firestore-plus-schema'
-
-class Comment extend DocumentSchema {
-  // Set field typees
-  static fieldTypes = { 
-    
-  }
-  
-  // Set default fields
-  static defaultFields = {
-  
-  }
-  
-  static collection = "comments" // or using wildcards for subcollections: 'users/:userid/comments
-  
-  // Add some instance methods
-  
-  /**
-  * Replies to a comment and then returns the comment replied to
-  */
-  reply(...data){
-    // ...
-    return new Comment(/* ...data */)
-  }
-}
-
-```
-
-**Using a schema**
-
-```js
-// after performing all the usual initialization stuff
-import CommentSchema from '/path/to/schema'
-
-// Attach schema to collection path
-firestorePlus.schema('comments', CommentSchema)
-
-// Or to a subcollection path
-firestorePlus.schema('users/:uid/comments', CommentSchema)
-
-// Now when you retreive a document reference from this path you will get an instance of Comment
-firestorePlus.doc(`comments/${commentId}`) instanceof CommentSchema // true
-// Subcollections too
-firestorePlus.collection(`users`).doc(uid).collection('comments').doc(commentId) instanceof CommentSchema
-```
-
-Documents created from schema will inherit methods and properties of `firebase.firestore.DocumentReference`, but will also add some hooks that are otherwise missing from firestore, such as pre-store, pre-create, pre-set, pre-update, pre-remove, and pre-get. pre-store could be useful for dehydrating a custom class into a simple plain object while pre-get would be useful for rehydrating that plain object into your custom class.
-
-### Creating a plugin
-
-As an example, let's create a simple plugin
-
-```js
-import { FirestorePlusPlugin } from 'firestore-plus'
-
-class FirestorePlusLog extends FirestorePlusPlugin {
-  /**
-  * Called when use is called on this plugin
-  * This function should return an object that will
-  * be used to extend firestore-plus.
-  */
-  init(settings){
-    return { 
-      toggleLogging : () => this.isLogging = !this.isLogging
-    }
-  }
-}
-
-```
-
-## Prior Art
-
-[geofirestore](https://github.com/geofirestore/geofirestore-js) is a module that adds geohashing to firestore. 
