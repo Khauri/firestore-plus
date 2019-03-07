@@ -1,0 +1,21 @@
+{
+  "name": "firestore-plus",
+  "version": "1.0.0",
+  "description": "Additional firestore functionality",
+  "main": "index.js",
+  "repository": "https://github.com/Khauri/firestore-plus",
+  "author": "<kmcclain@email.wm.edu>",
+  "license": "MIT",
+  "dependencies": {
+    "yup": "^0.26.10"
+  },
+  "scripts": {
+    "test": "babel-node ./test.js"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.3.4",
+    "@babel/node": "^7.2.2",
+    "@babel/preset-env": "^7.3.4",
+    "firebase": "^5.8.5"
+  }
+}
