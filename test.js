@@ -1,44 +1,46 @@
 import firebase from 'firebase'
 
-import FirestorePlus, { Schema, FieldTypes } from './src'
+import FirestorePlus, { Schema, FieldTypes, plugins } from './src'
 
 import { firebaseConfig } from './config'
-
-console.log(firebaseConfig)
 
 firebase.initializeApp(firebaseConfig)
 
 // Initialize firestorePlus
-const firestoreP = new FirestorePlus(firebase)
+FirestorePlus(firebase)
+
+const schemaPlugin = new plugins.SchemaPlugin()
+firebase.firestore().plus(schemaPlugin)
 
 // Class method of creating schema
-class Posts extends Schema {
-}
+class Posts extends Schema {}
+
 Posts.fieldTypes = {
-    text : FieldTypes.string()
+    title : FieldTypes.number()
 }
 Posts.defaultFields = {
     picture : "Hello World"
 }
 
-firestoreP.model('posts', Posts)
+schemaPlugin.model('posts', Posts)
 
-// Object meethod of creating schema
+
+// Object method of creating schema
 const fields = {
     text : {
-        type : FieldTypes.string(),
+        type : FieldTypes.string().email(),
         default : "Hello World"
     },
-    title : FieldTypes.string()
+    title : FieldTypes.number()
 }
-firestoreP.model('posts/:postid/comments', fields)
+schemaPlugin.model('posts/:postid/comments', fields)
 
 async function test(){
     let post = firebase.firestore().doc('posts/4o6VxumWTciSYVUdqSu7')
     const snap = await post.get()
-    const data = snap.data()
-    console.log(data)
-    return true
+    return snap.data()
 }
 
 test()
+    .then(val => console.log(val))
+    .catch( e => console.log(e.message))

@@ -3,14 +3,15 @@ import sinonChai from 'sinon-chai'
 import { stub, spy, createSandbox, SinonSandbox, SinonStub, SinonSpy, SinonMock } from 'sinon'
 import { client as firebase, admin } from './firebase'
 
+use(sinonChai)
+
 // Stub DocumentSnapshot so that it returns the first argument passed to it
 // This needs to be done before FireStorePlus is initialized
 const documentSnapshotDataStub = stub(firebase.firestore.DocumentSnapshot.prototype, 'data')
     
 
-import FirestorePlus, { Schema, FieldTypes } from '../src'
+import FirestorePlus, { Schema, plugins } from '../src'
 
-use(sinonChai)
 
 /**
  * Create a fake DocumentReference object that's similar
@@ -64,28 +65,49 @@ function callData(path='test/path', data = { number : 0, string : 'hello', array
     return [ result, data ]
 }
 
-beforeEach(function(){
-    this.sandbox = createSandbox()
-})
-
-afterEach(function(){
-    this.sandbox.restore()
-})
-
 describe('Schema Tests', function(){
     /**
      * Expects firestorePlus and schema
      */
     beforeEach(function(){
-        this.firestorePlus = new FirestorePlus(firebase)
-        const schema = {}
-        this.schemas = {
-            collection : this.firestorePlus.model('test', schema),
-            subcollection : this.firestorePlus.model('test/:subcollection/test', schema)
-        }
+        this.fp = FirestorePlus(firebase, true)
+        this.fp.use(new plugins.SchemaPlugin())
+    })
+
+    describe("#isSchema", function(){
+        describe("with Schema", function(){
+            it("should return true", function(){
+                class MySchema extends Schema {}
+                assert.isTrue(Schema.isSchema(MySchema))
+            })
+        })
+        describe("with other values", function(){
+            it("should return false", function(){
+                assert.isFalse(Schema.isSchema(0), 'Falsy Number')
+                assert.isFalse(Schema.isSchema(null), 'Null')
+                assert.isFalse(Schema.isSchema(false), 'Falsy Boolean')
+                assert.isFalse(Schema.isSchema(true), 'Truthy Boolean')
+                assert.isFalse(Schema.isSchema(Date), 'Object')
+                assert.isFalse(Schema.isSchema({}), 'Plain Object')
+            })
+        })
     })
 
     describe(".validate", function(){
+        beforeEach(function(){
+            this.sandbox = createSandbox()
+            this.schemas = {
+                collection : this.fp.schema.model('test', {}),
+                subcollection : this.fp.schema.model('test/:subcollection/test', {})
+            }
+        })
+        
+        afterEach(function(){
+            /** @type {SinonSandbox} */
+            const sandbox = this.sandbox
+            sandbox.restore()
+        })
+
         it("should be called when DocumentSnapshot#data called", async function(){
             /** @type {SinonSandbox} */
             const sandbox = this.sandbox
@@ -96,7 +118,7 @@ describe('Schema Tests', function(){
             const [result, data] = callData()
 
             assert.deepEqual(result, data)
-            // TODO: This is called an insane amount of times for some reason
+
             expect(spy).to.have.been.calledOnce
         })
 
@@ -111,6 +133,65 @@ describe('Schema Tests', function(){
 
             expect(preSpy).to.have.been.calledOnce
             expect(postSpy).to.have.been.calledOnce
+        })
+    })
+})
+
+describe("Schema Plugin Tests", function(){
+//     describe("#model", function(){
+//         beforeEach(function(){
+//             this.fp = FirestorePlus(client)
+//         })
+
+//         describe("with missing schema", function(){
+//             it("should throw TypeError", function(){
+//                 expect(()=>this.fp.model('test', null)).to.throw(TypeError)
+//             })
+//         })
+
+//         describe("with missing path", function(){
+//             it("should throw TypeError", function(){
+//                 expect(()=>this.fp.model(null, {})).to.throw(TypeError)
+//             })
+//         })
+
+//         describe("using class", function(){
+//             it("should throw TypeError if class is not schema", function(){
+//                 class MySchema {}
+//                 expect(()=>this.fp.model('test', MySchema)).to.throw(TypeError)
+//             })
+//             it("should return passed in schema", function(){
+//                 class MySchema extends Schema {}
+//                 const schema = this.fp.model('test', MySchema)
+//                 assert.strictEqual(MySchema, schema)
+//             })
+//         })
+//         describe("using object", function(){
+//             it("should return Schema object", function(){
+//                 const schema = this.fp.model('test', {})
+//                 assert.isTrue(Schema.isPrototypeOf(schema))
+//             })
+//         })
+//     })
+
+    describe("#getSchemaByPath", function(){
+        beforeEach(function(){
+            this.fp = FirestorePlus(firebase, true)
+            this.fp.use(new plugins.SchemaPlugin())
+            this.schemas = {
+                collection : this.fp.schema.model('test', {}),
+                subcollection : this.fp.schema.model('test/:subcollection/test', {})
+            }
+        })
+        it("should retrieve collection", function(){
+            const schema = this.fp.schema.model('test', {})
+            const s2 = this.fp.schema.getSchemaByPath('test/id')
+            assert.strictEqual(s2, schema)
+        })
+        it("should retrieve subcollection", function(){
+            const schema = this.fp.schema.model('test/id/test', {})
+            const s2 = this.fp.schema.getSchemaByPath('test/id/test/id')
+            assert.strictEqual(s2, schema)
         })
     })
 })

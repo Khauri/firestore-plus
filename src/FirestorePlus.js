@@ -1,116 +1,72 @@
-import { SchemaBuilder } from './Schema'
-import * as extensions from './extend'
+import { SchemaBuilder, Schema } from './Schema'
+import { FirestorePlusPlugin } from './Plugin'
 
-export default class FirestorePlus {
+const createPlusObject = (firebase) => {
+    const fp = new FirestorePlus(firebase)
+
+    function plus(plugin, options){
+        if(arguments.length === 0){
+            return fp
+        }
+        if(FirestorePlusPlugin.isPlugin(plugin)){
+            fp.use(plugin, options)
+        } else {
+            for(let key in obj){
+                fp.use(obj[key], key)
+            }
+        }
+        return fp
+    }
+    plus.instance = fp
+    
+    return plus
+}
+
+/**
+ * A function that idempotently attaches the plus interface to firestore
+ * @param {*} firebase 
+ * @returns {FirestorePlus}
+ */
+export default function hooker(firebase, forceRecreate){
+    if(!firebase || typeof firebase.firestore !== 'function'){
+        throw new TypeError('firebase instance with firestore enabled is required')
+    }
+    const hookTarget = firebase.firestore.Firestore.prototype
+    if(!hookTarget['plus'] || forceRecreate === true){
+        hookTarget['plus'] = createPlusObject(firebase)
+    }
+    return hookTarget['plus'].instance
+}
+
+class FirestorePlus {
     /**
-     * 
+     * Creates a new instance of FirestorePlus
      * @param {firebase} firebase 
      */
     constructor(firebase){
-        if(!firebase || typeof firebase.firestore !== 'function'){
-            throw new TypeError('firebase instance with firestore enabled is required')
-        }
         this.firebase = firebase
-        this.firestore = firebase.firestore()
-        this._schema = {}
-        this._init()
+        this.plugins = {}
     }
 
-    static isSchema(obj){
-        return obj !== null 
-            && typeof obj !== 'undefined' 
-            && obj.__is_firestore_plus_schema__ === true
-    }
-
-    /**
-     * @param {Array<String>|String} arrayOrString 
-     * @param {Object} schemaOrObject 
-     */
-    model(arrayOrString, schemaOrObject){
-        if(!schemaOrObject || !arrayOrString){
-            throw new TypeError(`path(s) and schema definition required but recieved [${
-                Array.from(arguments).map(el=>typeof el).join()
-            }]`)
+    use(plugin={}, name = plugin.defaultName, id = plugin.id || name){
+        if(!name){
+            throw new TypeError('plugin with no default name supplied')
         }
-        // first resolve the schema
-        if(!FirestorePlus.isSchema(schemaOrObject)){
-            if(typeof schemaOrObject === 'function'){
-                throw new TypeError('schema should inherit from Schema class')
+        /** @type {PropertyDescriptor} */
+        const descriptor = {
+            value : plugin,
+            enumerable : false, 
+            writable : false,
+        }
+        if(!this.plugins[plugin.id]){
+            if(typeof plugin.__init === 'function'){
+                plugin.__init(this)
             }
-            schemaOrObject = SchemaBuilder(schemaOrObject)
+            Object.defineProperty(this.plugins, id, descriptor)
         }
-        if(arrayOrString instanceof Array){
-            // pointless recursion?
-            arrayOrString.forEach(string => this.model(string, schemaOrObject))
+        if(!this[name]){
+            Object.defineProperty(this, name, descriptor)
         }
-        if(!(typeof arrayOrString === 'string')){
-            throw `Path must string or array of strings`
-        }
-        this._schema[arrayOrString] = schemaOrObject
-        return schemaOrObject
-    }
-
-    /**
-     * 
-     * @param {string} path 
-     */
-    getSchemaByPath(path){
-        let schema = null,
-            params = {}
-        path = path.split(/\\|\//g).filter(Boolean).slice(0,-1)
-        for(let key in this._schema){
-            let temp = this._schema[key]
-            key = key.split(/\\|\//g).filter(Boolean)
-            if(path.length !== key.length){
-                continue
-            }
-            let i = key.length - 1
-            while(--i >= 0){
-                // check for equivalency and wildcards
-                if(key[i] !== path[i] && /^:/.test(key[i]) === false){
-                    break
-                }
-            }
-            if(i < 0){
-                schema = temp
-            }
-        }
-        return schema
-    }
-    /**
-     * Adds all necessary functions and methods to the passed in
-     * instance of firebase. Honestly, don't try to read this b/c 
-     * it's a mess.
-     */
-    _init(){
-        for(let key in extensions){
-            let targets = extensions[key]
-            for(let path in targets){
-                let target = path.split('.').reduce( (curr, part) => {
-                    return curr && curr[part]
-                }, this.firebase)
-                if(!target){
-                    continue
-                }
-                let exts = targets[path](this)
-                for(let prop in exts){
-                    let oldVal = target[prop],
-                        newVal = exts[prop]
-                    if(typeof oldVal === 'function' && typeof newVal === 'function'){
-                        // Get 
-                        if(oldVal.__is_firestore_plus_stubbed === true){
-                            oldVal = oldVal.__firestore_plus_stubbed_function
-                        }
-                        // Try to keep the value of `this` bound
-                        function stub (...args){ return newVal.call(this, oldVal, ...args) }
-                        stub.__is_firestore_plus_stubbed = true
-                        stub.__firestore_plus_stubbed_function = oldVal
-                        target[prop] = stub
-                    }else {
-                        target[prop] = newVal
-                    }
-                }
-            }
-        }
+        return this
     }
 }

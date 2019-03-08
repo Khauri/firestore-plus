@@ -12,6 +12,11 @@ export class Schema {
         
     }
 
+    static isSchema(obj){
+        return Boolean(obj) && 
+            obj.__firestore_plus_schema__ === true
+    }
+
     static get __is_firestore_plus_schema__(){
         return true
     }
@@ -41,6 +46,7 @@ export class Schema {
      */
     static postValidate(data){}
 }
+Schema.__firestore_plus_schema__ = true
 Schema.fieldTypes = {}
 Schema.defaultFields = {}
 
