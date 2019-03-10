@@ -1,13 +1,16 @@
 import { assert, expect, use } from 'chai'
 import sinonChai from 'sinon-chai'
-import { stub, spy, createSandbox, SinonSandbox, SinonStub, SinonSpy, SinonMock } from 'sinon'
+import { stub, match, createSandbox, SinonSandbox, SinonStub, SinonSpy, SinonMock } from 'sinon'
 import { client as firebase, admin } from './firebase'
 
 use(sinonChai)
 
 // Stub DocumentSnapshot so that it returns the first argument passed to it
 // This needs to be done before FireStorePlus is initialized
-const documentSnapshotDataStub = stub(firebase.firestore.DocumentSnapshot.prototype, 'data')
+const DocumentSnapshotDataStub = stub(firebase.firestore.DocumentSnapshot.prototype, 'data')
+// Stub DocumentReference#set and #update so that no network calls are actually made
+const DocumentReferenceSetStub = stub(firebase.firestore.DocumentReference.prototype, 'set')
+const DocumentReferenceUpdateStub = stub(firebase.firestore.DocumentReference.prototype, 'update')
     
 
 import FirestorePlus, { Schema, plugins } from '../src'
@@ -54,7 +57,7 @@ const createDocumentSnapshot = (path, data) => {
  */
 function callData(path='test/path', data = { number : 0, string : 'hello', array : [] }){
     // Trigger DataStub to return passed in data
-    documentSnapshotDataStub.returns(data)
+    DocumentSnapshotDataStub.returns(data)
     const result = firebase
         .firestore
         .DocumentSnapshot
@@ -108,19 +111,55 @@ describe('Schema Tests', function(){
             sandbox.restore()
         })
 
-        it("should be called when DocumentSnapshot#data called", async function(){
-            /** @type {SinonSandbox} */
-            const sandbox = this.sandbox
-            // Spy on the validate function
-            const spy = sandbox.spy(Schema, 'validate')
-            
-            // Trigger DocumentSnapshot data call
-            const [result, data] = callData()
+        describe("test runner", function(){
+            it("is called with DocumentSnapshot#data", function(){
+                /** @type {SinonSandbox} */
+                const sandbox = this.sandbox
+                // Spy on the validate function
+                const spy = sandbox.spy(Schema, 'validate')
+                
+                // Trigger DocumentSnapshot data call
+                const [result, data] = callData()
+    
+                assert.deepEqual(result, data)
+    
+                expect(spy).to.have.been.calledOnce
+            })
 
-            assert.deepEqual(result, data)
+            it("is called with DocumentReference#set", async function(){
+                /** @type {SinonSandbox} */
+                const sandbox = this.sandbox
+                // Spy on the validate function
+                const spy = sandbox.spy(Schema, 'validate')
+                const data = { much : 'data', big : 'wow' },
+                    options = { merge : true}
 
-            expect(spy).to.have.been.calledOnce
+                await firebase.firestore().doc('test/path').set(data, options)
+
+                expect(spy).to.have.been.calledOnce
+                // Check that it also calls the original function
+                expect(DocumentReferenceSetStub).to.have.been.calledOnceWith(match(data), match(options))
+                return true
+            })
+
+            it("is called with DocumentReeference#update", async function(){
+                /** @type {SinonSandbox} */
+                const sandbox = this.sandbox
+                // Spy on the validate function
+                const spy = sandbox.spy(Schema, 'validate')
+
+                const data = {much:'data', big:'wow'}
+
+                await firebase.firestore().doc('test/path').update(data)
+
+                expect(spy).to.have.been.calledOnce
+
+                // Check original function is still called
+                expect(DocumentReferenceUpdateStub).to.have.been.calledOnceWith(match(data))
+                return true
+            })
         })
+
 
         it("should call pre and post validate hooks", function(){
             /** @type {SinonSandbox} */

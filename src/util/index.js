@@ -1,21 +1,44 @@
 class chainHandler {
     constructor(data={}){
         Object.assign(this, data)
-        this.current = null
-        this.isCanceled = false
+        this._stopped = false
+        this._next = true
+        this._val = null
         // eagerly awaiting class properties being standardized
-        this.done = this.done.bind(this)
+        // this.done = this.done.bind(this)
+        this.next = this.next.bind(this)
+        this.resolve = this.resolve.bind(this)
         this.stop = this.stop.bind(this)
     }
-    done(val){
-        this.current = val 
+    /**
+     * Calls the next function with the arguments supplied
+     * @param  {...any} args 
+     */
+    next(args){
+        if(args.length){
+            this.args = args
+        }
+        this._next = true
     }
+    /**
+     * Immediately stops the chain and returns the value supplied
+     * @param {*} val 
+     */
+    resolve(val){
+        this._val = val
+        this._next = false
+        this.stop()
+    }
+    /**
+     * Stops the chain. Doesn't necesarily prevent the old function
+     * from being called afterwards unless resolved first
+     */
     stop(){
-        this.isCanceled = true
+        this._stopped = true
     }
 }
 
-export const createFunctionHandler = (fp, oldFn, newFn, isAsync=false, ...extra) => {
+export const createFunctionHandler = (fp, oldFn, newFn, isAsync=false, position ) => {
     // if already stubbed
     const key = '__firestore_plus_stubbed_fn__'
     // console.log("old, new", oldFn[key])
@@ -30,30 +53,46 @@ export const createFunctionHandler = (fp, oldFn, newFn, isAsync=false, ...extra)
         queue = [ newFn ]
     if(isAsync){
         handler = async function(...args){
-            const chain = new chainHandler({ wrapped : oldFn, fp, context : this})
-            // console.log("Async", queue, chain)
+            const chain = new chainHandler({ wrapped : oldFn, fp, context : this, args })
             for(let handler of queue){
-                await handler.call(this, chain, ...args)
-            }
-            return chain.current
-        }
-    }else{
-        handler = function(...args){
-            const chain = new chainHandler({ wrapped : oldFn, fp, context : this })
-            for(let handler of queue){
-                handler.call(this, chain, ...args)
-                if(chain.isCanceled){
+                await handler.call(this, chain)
+                if(chain._stopped === true){
                     break
                 }
             }
-            return chain.current
+            if(chain._next === true){
+                return oldFn(...chain.args)
+            }
+            return chain._val
+        }
+    }else{
+        handler = function(...args){
+            const chain = new chainHandler({ wrapped : oldFn, fp, context : this, args })
+            for(let handler of queue){
+                handler.call(this, chain)
+                if(chain._stopped === true){
+                    break
+                }
+            }
+            if(chain._next === true){
+                return oldFn(...chain.args)
+            }
+            return chain._val
         }
     }
     handler[key] = { queue, fp, oldFn }
     return handler
 }
-
-export function overwrite(fp, target, path, value, isAsync, ...extra){
+/**
+ * 
+ * @param {*} fp 
+ * @param {*} target 
+ * @param {*} path 
+ * @param {*} value 
+ * @param {*} isAsync 
+ * @param {'before'|'default'|'after'} position The point in the chain the function will be run
+ */
+export function overwrite(fp, target, path, value, isAsync, position="default"){
     const last = path.pop() 
     let curr = target
     let part 
@@ -67,5 +106,5 @@ export function overwrite(fp, target, path, value, isAsync, ...extra){
         curr[last] = value
         return
     }
-    curr[last] = createFunctionHandler(fp, curr[last], value, isAsync, ...extra)
+    curr[last] = createFunctionHandler(fp, curr[last], value, isAsync, position)
 }

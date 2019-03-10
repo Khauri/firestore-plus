@@ -16,27 +16,54 @@ export class SchemaPlugin extends FirestorePlusPlugin {
 
     get extensions(){
         return {
+            /**
+             * Runs validation upon document get
+             * Because this resolves the document, this should
+             * plugin should be listed last.
+             */
             [PluginTargets.DocumentSnapshot('data')] : (chain) => {
-                const { wrapped, context, current, done } = chain
-                const data = current || wrapped.call(context)
+                const { wrapped, context, args, resolve } = chain
+                const data = args[0] || wrapped.call(context)
                 const path = context.ref.path 
                 const schema = this.getSchemaByPath(path)
                 if(!schema){
-                    return done(data)
+                    return resolve(data)
                 }
-                done(schema.validate(data, { strict : true }))
+                resolve(schema.validate(data, { strict : true }))
             },
-            
-
-            // [PluginTargets.DocumentSnapshot('get')](){
-                
-            // }
+            // Validates the data before setting
+            [PluginTargets.DocumentReference('set', true)] : async (chain) => {
+                const { context, args, next } = chain
+                const path = context.path 
+                const schema = this.getSchemaByPath(path)
+                if(!schema){
+                    return next()
+                }
+                args[0] = schema.validate(args[0], { strict : true })
+                return next(args)
+            },
+            // Validates the data before updating
+            [PluginTargets.DocumentReference('update', true)] : async (chain) => {
+                const { context, args, next } = chain
+                const path = context.path 
+                const schema = this.getSchemaByPath(path)
+                if(!schema){
+                    return next()
+                }
+                if(typeof args[0] === 'string'){
+                    // alternating syntax not currently supported so just continue
+                    return next()
+                }
+                args[0] = schema.validate(args[0], { strict : true })
+                return next(args)
+            }
         }
     }
 
     /**
-     * 
+     * Returns the schema given a path
      * @param {string} path 
+     * @returns {typeof Schema}
      */
     getSchemaByPath(path){
         let schema = null,
