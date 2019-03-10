@@ -15,7 +15,7 @@ class chainHandler {
      * @param  {...any} args 
      */
     next(args){
-        if(args.length){
+        if(args && args.length){
             this.args = args
         }
         this._next = true

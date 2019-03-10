@@ -2,8 +2,9 @@ import { Schema, SchemaBuilder } from '../Schema'
 import { FirestorePlusPlugin, PluginTargets } from '../Plugin'
 
 export class SchemaPlugin extends FirestorePlusPlugin {
-    constructor(validator){
+    constructor({ autoValidate = true } = {}){
         super()
+        this.autoValidate = autoValidate
         this.schema = {}
     }
     get defaultName(){
@@ -22,18 +23,24 @@ export class SchemaPlugin extends FirestorePlusPlugin {
              * plugin should be listed last.
              */
             [PluginTargets.DocumentSnapshot('data')] : (chain) => {
-                const { wrapped, context, args, resolve } = chain
+                const { wrapped, context, args, next, resolve } = chain
+                if(this.autoValidate === false){
+                    return next()
+                }
                 const data = args[0] || wrapped.call(context)
-                const path = context.ref.path 
+                const path = context.ref.path
                 const schema = this.getSchemaByPath(path)
                 if(!schema){
                     return resolve(data)
                 }
-                resolve(schema.validate(data, { strict : true }))
+                return resolve(schema.validate(data, { strict : true }))
             },
             // Validates the data before setting
             [PluginTargets.DocumentReference('set', true)] : async (chain) => {
                 const { context, args, next } = chain
+                if(this.autoValidate === false){
+                    return next()
+                }
                 const path = context.path 
                 const schema = this.getSchemaByPath(path)
                 if(!schema){
@@ -45,6 +52,9 @@ export class SchemaPlugin extends FirestorePlusPlugin {
             // Validates the data before updating
             [PluginTargets.DocumentReference('update', true)] : async (chain) => {
                 const { context, args, next } = chain
+                if(this.autoValidate === false){
+                    return next()
+                }
                 const path = context.path 
                 const schema = this.getSchemaByPath(path)
                 if(!schema){
