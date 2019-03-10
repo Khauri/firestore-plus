@@ -26,6 +26,7 @@ export class SchemaPlugin extends FirestorePlusPlugin {
                 }
                 done(schema.validate(data, { strict : true }))
             },
+            
 
             // [PluginTargets.DocumentSnapshot('get')](){
                 
