@@ -8683,6 +8683,20 @@ class FirestorePlus {
 
 }
 
+/**
+ * Converts a path such as path/:to/doc/:id
+ * to path-doc
+ * @param {string} path
+ */
+
+const getCollectionPath = path => {
+  return path // Remove leading and trailing /
+  .replace(/^[/\\]|[/\\]$/g, "") // Split by slash
+  .split(/[\\/]/g) // Remove every odd value
+  .filter((v, i) => i % 2 === 0) // Join by '-'
+  .join("-");
+};
+
 class SchemaPlugin extends FirestorePlusPlugin {
   constructor() {
     let _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
@@ -8808,27 +8822,11 @@ class SchemaPlugin extends FirestorePlusPlugin {
 
   getSchemaByPath(path) {
     let schema = null;
-    path = path.split(/\\|\//g).filter(Boolean).slice(0, -1);
+    path = getCollectionPath(path);
 
     for (let key in this.schema) {
-      let temp = this.schema[key];
-      key = key.split(/\\|\//g).filter(Boolean);
-
-      if (path.length !== key.length) {
-        continue;
-      }
-
-      let i = key.length - 1;
-
-      while (--i >= 0) {
-        // check for equivalency and wildcards
-        if (key[i] !== path[i] && /^:/.test(key[i]) === false) {
-          break;
-        }
-      }
-
-      if (i < 0) {
-        schema = temp;
+      if (path === key) {
+        return this.schema[key];
       }
     }
 
@@ -8855,14 +8853,14 @@ class SchemaPlugin extends FirestorePlusPlugin {
     }
 
     if (arrayOrString instanceof Array) {
-      arrayOrString.forEach(string => this.model(string, schemaOrObject));
+      return arrayOrString.map(string => this.model(string, schemaOrObject));
     }
 
     if (!(typeof arrayOrString === 'string')) {
       throw `Path must string or array of strings`;
     }
 
-    this.schema[arrayOrString] = schemaOrObject;
+    this.schema[getCollectionPath(arrayOrString)] = schemaOrObject;
     return schemaOrObject;
   }
 
