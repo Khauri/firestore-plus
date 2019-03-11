@@ -8110,7 +8110,7 @@ var lib_12 = lib.reach;
 var lib_13 = lib.isSchema;
 var lib_14 = lib.setLocale;
 
-var yup = /*#__PURE__*/Object.freeze({
+var index$1 = /*#__PURE__*/Object.freeze({
 	default: index,
 	__moduleExports: lib,
 	addMethod: lib_1,
@@ -8128,6 +8128,42 @@ var yup = /*#__PURE__*/Object.freeze({
 	isSchema: lib_13,
 	setLocale: lib_14
 });
+
+function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) {
+  try {
+    var info = gen[key](arg);
+    var value = info.value;
+  } catch (error) {
+    reject(error);
+    return;
+  }
+
+  if (info.done) {
+    resolve(value);
+  } else {
+    Promise.resolve(value).then(_next, _throw);
+  }
+}
+
+function _asyncToGenerator(fn) {
+  return function () {
+    var self = this,
+        args = arguments;
+    return new Promise(function (resolve, reject) {
+      var gen = fn.apply(self, args);
+
+      function _next(value) {
+        asyncGeneratorStep(gen, resolve, reject, _next, _throw, "next", value);
+      }
+
+      function _throw(err) {
+        asyncGeneratorStep(gen, resolve, reject, _next, _throw, "throw", err);
+      }
+
+      _next(undefined);
+    });
+  };
+}
 
 function _defineProperty$1(obj, key, value) {
   if (key in obj) {
@@ -8214,6 +8250,10 @@ function getFirstObject() {
 class Schema {
   constructor(data) {}
 
+  static isSchema(obj) {
+    return Boolean(obj) && obj.__firestore_plus_schema__ === true;
+  }
+
   static get __is_firestore_plus_schema__() {
     return true;
   }
@@ -8247,6 +8287,7 @@ class Schema {
   static postValidate(data) {}
 
 }
+Schema.__firestore_plus_schema__ = true;
 Schema.fieldTypes = {};
 Schema.defaultFields = {};
 /**
@@ -8300,89 +8341,464 @@ function SchemaBuilder() {
   return CustomSchema;
 }
 
-/**
- * Extends the document snapshot
- */
-const documentSnapshot = {
-  'firestore.DocumentSnapshot.prototype': firestorePlusInstance => ({
-    data(oldFn) {
-      let data = oldFn.call(this);
-      const path = this.ref.path;
-      const schema = firestorePlusInstance.getSchemaByPath(path);
+class chainHandler {
+  constructor() {
+    let data = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+    Object.assign(this, data);
+    this._stopped = false;
+    this._next = true;
+    this._val = null; // eagerly awaiting class properties being standardized
+    // this.done = this.done.bind(this)
 
-      if (!schema) {
-        return data;
-      }
+    this.next = this.next.bind(this);
+    this.resolve = this.resolve.bind(this);
+    this.stop = this.stop.bind(this);
+  }
+  /**
+   * Calls the next function with the arguments supplied
+   * @param  {...any} args 
+   */
 
-      return schema.validate(data, {
-        strict: true
-      });
+
+  next(args) {
+    if (args && args.length) {
+      this.args = args;
     }
 
-  })
+    this._next = true;
+  }
+  /**
+   * Immediately stops the chain and returns the value supplied
+   * @param {*} val 
+   */
+
+
+  resolve(val) {
+    this._val = val;
+    this._next = false;
+    this.stop();
+  }
+  /**
+   * Stops the chain. Doesn't necesarily prevent the old function
+   * from being called afterwards unless resolved first
+   */
+
+
+  stop() {
+    this._stopped = true;
+  }
+
+}
+
+const createFunctionHandler = function createFunctionHandler(fp, oldFn, newFn) {
+  let isAsync = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : false;
+  // if already stubbed
+  const key = '__firestore_plus_stubbed_fn__'; // console.log("old, new", oldFn[key])
+
+  if (oldFn[key]) {
+    if (oldFn[key].fp === fp) {
+      oldFn[key].queue.push(newFn);
+      return oldFn;
+    }
+
+    oldFn = oldFn[key].oldFn;
+  }
+
+  let handler,
+      queue = [newFn];
+
+  if (isAsync) {
+    handler =
+    /*#__PURE__*/
+    function () {
+      var _ref = _asyncToGenerator(function* () {
+        for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+          args[_key] = arguments[_key];
+        }
+
+        const chain = new chainHandler({
+          wrapped: oldFn,
+          fp,
+          context: this,
+          args
+        });
+
+        for (let handler of queue) {
+          yield handler.call(this, chain);
+
+          if (chain._stopped === true) {
+            break;
+          }
+        }
+
+        if (chain._next === true) {
+          return oldFn(...chain.args);
+        }
+
+        return chain._val;
+      });
+
+      return function handler() {
+        return _ref.apply(this, arguments);
+      };
+    }();
+  } else {
+    handler = function handler() {
+      for (var _len2 = arguments.length, args = new Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+        args[_key2] = arguments[_key2];
+      }
+
+      const chain = new chainHandler({
+        wrapped: oldFn,
+        fp,
+        context: this,
+        args
+      });
+
+      for (let handler of queue) {
+        handler.call(this, chain);
+
+        if (chain._stopped === true) {
+          break;
+        }
+      }
+
+      if (chain._next === true) {
+        return oldFn(...chain.args);
+      }
+
+      return chain._val;
+    };
+  }
+
+  handler[key] = {
+    queue,
+    fp,
+    oldFn
+  };
+  return handler;
+};
+/**
+ * 
+ * @param {*} fp 
+ * @param {*} target 
+ * @param {*} path 
+ * @param {*} value 
+ * @param {*} isAsync 
+ * @param {'before'|'default'|'after'} position The point in the chain the function will be run
+ */
+
+function overwrite(fp, target, path, value, isAsync) {
+  let position = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : "default";
+  const last = path.pop();
+  let curr = target;
+  let part;
+
+  while (part = path.shift()) {
+    if (!curr[part]) {
+      curr[part] = part;
+    }
+
+    curr = curr[part];
+  }
+
+  if (typeof curr[last] !== 'function') {
+    curr[last] = value;
+    return;
+  }
+
+  curr[last] = createFunctionHandler(fp, curr[last], value, isAsync, position);
+}
+
+const createPluginTarget = val => {
+  function target(async, path) {
+    if (typeof async === 'string') {
+      path = async;
+      async = false;
+    }
+
+    return `${val}${path ? `.${path}` : ''}${async ? '#async' : ''}`;
+  }
+
+  target.toString = function () {
+    return val;
+  };
+
+  return target;
 };
 
+const PluginTargets = {
+  DocumentSnapshot: createPluginTarget('firebase.firestore.DocumentSnapshot.prototype'),
+  DocumentReference: createPluginTarget('firebasee.firestore.DocumentReference.prototype'),
+  CollectionReference: createPluginTarget('firebase.firestore.CollectionReference.prototype'),
+  QueryDocumentSnapshot: createPluginTarget('firebase.firestore.QueryDocumentSnapshot.prototype'),
+  QuerySnapshot: createPluginTarget('firebase.firestore.QuerySnapshot.prototype')
+};
+class FirestorePlusPlugin {
+  static isPlugin(plugin) {
+    return plugin && plugin.__firestore_plus_plugin__ === true;
+  }
+
+  get defaultName() {
+    return null;
+  }
+
+  get id() {
+    return null;
+  }
+
+  get __firestore_plus_plugin__() {
+    return true;
+  }
+
+  get extensions() {
+    return {};
+  } // Attach all appropriate methods of this instance
 
 
-var extensions = /*#__PURE__*/Object.freeze({
-	documentSnapshot: documentSnapshot
-});
+  __init(fp) {
+    this.fp = fp;
+    this.firebase = fp.firebase;
+    this.preInit();
+
+    for (let key in this.extensions) {
+      let isAsync = false;
+
+      if (/#async$/.test(key)) {
+        isAsync = true;
+        key = key.replace(/#async$/, "");
+      }
+
+      if (!/^firebase/.test(key)) {
+        continue;
+      }
+
+      if (/prototype$/.test(key)) {
+        throw "Overwriting entire prototype is not supported";
+      }
+
+      overwrite(fp, this.firebase, key.split('.').slice(1), this.extensions[key], isAsync);
+    }
+
+    this.init();
+  }
+
+  preInit() {// Called before initializing. Useful for adding dependencies
+    // this.fplus is available here
+  }
+
+  init() {}
+
+}
+FirestorePlusPlugin.__firestore_plus_plugin__ = true;
+
+const createPlusObject = firebase => {
+  const fp = new FirestorePlus(firebase);
+
+  function plus(plugin, options) {
+    if (arguments.length === 0) {
+      return fp;
+    }
+
+    if (FirestorePlusPlugin.isPlugin(plugin)) {
+      fp.use(plugin, options);
+    } else {
+      for (let key in obj) {
+        fp.use(obj[key], key);
+      }
+    }
+
+    return fp;
+  }
+
+  plus.instance = fp;
+  return plus;
+};
+/**
+ * A function that idempotently attaches the plus interface to firestore
+ * @param {*} firebase 
+ * @returns {FirestorePlus}
+ */
+
+
+function hooker(firebase, forceRecreate) {
+  if (!firebase || typeof firebase.firestore !== 'function') {
+    throw new TypeError('firebase instance with firestore enabled is required');
+  }
+
+  const hookTarget = firebase.firestore.Firestore.prototype;
+
+  if (!hookTarget['plus'] || forceRecreate === true) {
+    hookTarget['plus'] = createPlusObject(firebase);
+  }
+
+  return hookTarget['plus'].instance;
+}
 
 class FirestorePlus {
   /**
-   * 
+   * Creates a new instance of FirestorePlus
    * @param {firebase} firebase 
    */
   constructor(firebase) {
-    if (!firebase || typeof firebase.firestore !== 'function') {
-      throw new TypeError('firebase instance with firestore enabled is required');
-    }
-
     this.firebase = firebase;
-    this.firestore = firebase.firestore();
-    this._schema = {};
-
-    this._init();
+    this.plugins = {};
   }
 
-  static isSchema(obj) {
-    return obj !== null && typeof obj !== 'undefined' && obj.__is_firestore_plus_schema__ === true;
-  }
-  /**
-   * @param {Array<String>|String} arrayOrString 
-   * @param {Object} schemaOrObject 
-   */
+  use() {
+    let plugin = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
+    let name = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : plugin.defaultName;
+    let id = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : plugin.id || name;
+
+    if (!name) {
+      throw new TypeError('plugin with no default name supplied');
+    }
+    /** @type {PropertyDescriptor} */
 
 
-  model(arrayOrString, schemaOrObject) {
-    if (!schemaOrObject || !arrayOrString) {
-      throw new TypeError(`path(s) and schema definition required but recieved [${Array.from(arguments).map(el => typeof el).join()}]`);
-    } // first resolve the schema
+    const descriptor = {
+      value: plugin,
+      enumerable: false,
+      writable: false
+    };
 
-
-    if (!FirestorePlus.isSchema(schemaOrObject)) {
-      if (typeof schemaOrObject === 'function') {
-        throw new TypeError('schema should inherit from Schema class');
+    if (!this.plugins[plugin.id]) {
+      if (typeof plugin.__init === 'function') {
+        plugin.__init(this);
       }
 
-      schemaOrObject = SchemaBuilder(schemaOrObject);
+      Object.defineProperty(this.plugins, id, descriptor);
     }
 
-    if (arrayOrString instanceof Array) {
-      // pointless recursion?
-      arrayOrString.forEach(string => this.model(string, schemaOrObject));
+    if (!this[name]) {
+      Object.defineProperty(this, name, descriptor);
     }
 
-    if (!(typeof arrayOrString === 'string')) {
-      throw `Path must string or array of strings`;
-    }
+    return this;
+  }
 
-    this._schema[arrayOrString] = schemaOrObject;
-    return schemaOrObject;
+}
+
+class SchemaPlugin extends FirestorePlusPlugin {
+  constructor() {
+    let _ref = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {},
+        _ref$autoValidate = _ref.autoValidate,
+        autoValidate = _ref$autoValidate === void 0 ? true : _ref$autoValidate;
+
+    super();
+    this.autoValidate = autoValidate;
+    this.schema = {};
+  }
+
+  get defaultName() {
+    return 'schema';
+  }
+
+  get id() {
+    return '@firestore-plus/schema';
+  }
+
+  get extensions() {
+    var _this = this;
+
+    return {
+      /**
+       * Runs validation upon document get
+       * Because this resolves the document, this should
+       * plugin should be listed last.
+       */
+      [PluginTargets.DocumentSnapshot('data')]: chain => {
+        const wrapped = chain.wrapped,
+              context = chain.context,
+              args = chain.args,
+              next = chain.next,
+              resolve = chain.resolve;
+
+        if (this.autoValidate === false) {
+          return next();
+        }
+
+        const data = args[0] || wrapped.call(context);
+        const path = context.ref.path;
+        const schema = this.getSchemaByPath(path);
+
+        if (!schema) {
+          return resolve(data);
+        }
+
+        return resolve(schema.validate(data, {
+          strict: true
+        }));
+      },
+      // Validates the data before setting
+      [PluginTargets.DocumentReference('set', true)]: function () {
+        var _ref2 = _asyncToGenerator(function* (chain) {
+          const context = chain.context,
+                args = chain.args,
+                next = chain.next;
+
+          if (_this.autoValidate === false) {
+            return next();
+          }
+
+          const path = context.path;
+
+          const schema = _this.getSchemaByPath(path);
+
+          if (!schema) {
+            return next();
+          }
+
+          args[0] = schema.validate(args[0], {
+            strict: true
+          });
+          return next(args);
+        });
+
+        return function (_x) {
+          return _ref2.apply(this, arguments);
+        };
+      }(),
+      // Validates the data before updating
+      [PluginTargets.DocumentReference('update', true)]: function () {
+        var _ref3 = _asyncToGenerator(function* (chain) {
+          const context = chain.context,
+                args = chain.args,
+                next = chain.next;
+
+          if (_this.autoValidate === false) {
+            return next();
+          }
+
+          const path = context.path;
+
+          const schema = _this.getSchemaByPath(path);
+
+          if (!schema) {
+            return next();
+          }
+
+          if (typeof args[0] === 'string') {
+            // alternating syntax not currently supported so just continue
+            return next();
+          }
+
+          args[0] = schema.validate(args[0], {
+            strict: true
+          });
+          return next(args);
+        });
+
+        return function (_x2) {
+          return _ref3.apply(this, arguments);
+        };
+      }()
+    };
   }
   /**
-   * 
+   * Returns the schema given a path
    * @param {string} path 
+   * @returns {typeof Schema}
    */
 
 
@@ -8390,8 +8806,8 @@ class FirestorePlus {
     let schema = null;
     path = path.split(/\\|\//g).filter(Boolean).slice(0, -1);
 
-    for (let key in this._schema) {
-      let temp = this._schema[key];
+    for (let key in this.schema) {
+      let temp = this.schema[key];
       key = key.split(/\\|\//g).filter(Boolean);
 
       if (path.length !== key.length) {
@@ -8415,62 +8831,44 @@ class FirestorePlus {
     return schema;
   }
   /**
-   * Adds all necessary functions and methods to the passed in
-   * instance of firebase. Honestly, don't try to read this b/c 
-   * it's a mess.
+   * @param {Array<String>|String} arrayOrString 
+   * @param {Object} schemaOrObject 
    */
 
 
-  _init() {
-    for (let key in extensions) {
-      let targets = extensions[key];
-
-      for (let path in targets) {
-        let target = path.split('.').reduce((curr, part) => {
-          return curr && curr[part];
-        }, this.firebase);
-
-        if (!target) {
-          continue;
-        }
-
-        let exts = targets[path](this);
-
-        for (let prop in exts) {
-          let oldVal = target[prop],
-              newVal = exts[prop];
-
-          if (typeof oldVal === 'function' && typeof newVal === 'function') {
-            // Get 
-            if (oldVal.__is_firestore_plus_stubbed === true) {
-              oldVal = oldVal.__firestore_plus_stubbed_function;
-            } // Try to keep the value of `this` bound
+  model(arrayOrString, schemaOrObject) {
+    if (!schemaOrObject || !arrayOrString) {
+      throw new TypeError(`path(s) and schema definition required but recieved [${Array.from(arguments).map(el => typeof el).join()}]`);
+    } // first resolve the schema
 
 
-            function stub() {
-              for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
-                args[_key] = arguments[_key];
-              }
-
-              return newVal.call(this, oldVal, ...args);
-            }
-
-            stub.__is_firestore_plus_stubbed = true;
-            stub.__firestore_plus_stubbed_function = oldVal;
-            target[prop] = stub;
-          } else {
-            target[prop] = newVal;
-          }
-        }
+    if (!Schema.isSchema(schemaOrObject)) {
+      if (typeof schemaOrObject === 'function') {
+        throw new TypeError('schema should inherit from Schema class');
       }
+
+      schemaOrObject = SchemaBuilder(schemaOrObject);
     }
+
+    if (arrayOrString instanceof Array) {
+      arrayOrString.forEach(string => this.model(string, schemaOrObject));
+    }
+
+    if (!(typeof arrayOrString === 'string')) {
+      throw `Path must string or array of strings`;
+    }
+
+    this.schema[arrayOrString] = schemaOrObject;
+    return schemaOrObject;
   }
 
 }
 
-class FirestorePlusPlugin {}
 
-const FieldTypes = yup;
 
-export default FirestorePlus;
-export { FieldTypes, Schema, SchemaBuilder, FirestorePlusPlugin };
+var index$2 = /*#__PURE__*/Object.freeze({
+	SchemaPlugin: SchemaPlugin
+});
+
+export default hooker;
+export { index$2 as plugins, index$1 as FieldTypes, Schema, SchemaBuilder, PluginTargets, FirestorePlusPlugin };

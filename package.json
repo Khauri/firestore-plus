@@ -1,6 +1,6 @@
 {
   "name": "firestore-plus",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Additional firestore functionality",
   "main": "dist/cjs.js",
   "module": "dist/es.js",
