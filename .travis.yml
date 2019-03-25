@@ -1,1 +1,11 @@
 language: node_js
+node_js : 
+  - "node"
+deploy:
+  provider: npm
+  email: kmcclain@email.wm.edu
+  api_key:
+    secure: Cqisy4p6sVrqNXhLgeHVrZL7rOdBIOsDe9FExx9Z5vhryZzTQQJCmfOrNy7Gkf0NL5pgggoHzAo7BxwDXvdRRmKdZ0V6sJn9bZy0jH78SX2+BioFtDMloNTlUHHA857E6BC9rlTPSdUdngkjipXW5IIKs8itOMTZOYUf5iKtZrsGrJ/GJh0UdWTTFH3WoeG7+D/6j0aMuA0xnXcqkKf6eDHQRkDbsBRk9rjkn1vWBD3loBiUDKrEw/5ibJqFkscRVa42ULipUAgRt4ZLgqonk2yzQSssMTavS10shCmZrjnfJ80jBcNiAjXk6yAKhKPIH1IPMSUdFEqCcCZT6XFYmnLnZfO4J0+0frd8dpyrwqe/sxsxuls6miPZzoAeLWMnbDllhVXanKxeLGatvPWGcydAeAyvcr8RdzHzrHesFk0/fVTFBvXO6DGvtcjno1PJKhb7dw+f7HuGbW3A3NI1ZphR3+9v7BaFq18WFLmigSRbxdG+YR7Q4QR8nVbHYWZ7AjL5TlCQpg7KczAm5fZbi/ujMhKInOmhlWlnoyTwC0Q0uvitCRWL0AYDgq4kUCovo3FMcEKFynBaUSoK6mOIyDAp+3Ha0f51/daLxwvZHmON4CEsw4aWbJzlTd0HjoD8EWj2b6cg6nDD7Fm/JRECo8WYEZFJ+WurdVi6+qySPdM=
+  on:
+    tags: true
+    repo: Khauri/firestore-plus
