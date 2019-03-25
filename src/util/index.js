@@ -61,7 +61,7 @@ export const createFunctionHandler = (fp, oldFn, newFn, isAsync=false, position 
                 }
             }
             if(chain._next === true){
-                return await oldFn(...chain.args)
+                return await oldFn.call(this,...chain.args)
             }
             return chain._val
         }
@@ -75,7 +75,7 @@ export const createFunctionHandler = (fp, oldFn, newFn, isAsync=false, position 
                 }
             }
             if(chain._next === true){
-                return oldFn(...chain.args)
+                return oldFn.call(this, ...chain.args)
             }
             return chain._val
         }

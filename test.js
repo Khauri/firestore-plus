@@ -31,16 +31,17 @@ const fields = {
         type : FieldTypes.string().email(),
         default : "Hello World"
     },
-    title : FieldTypes.number()
+    title : FieldTypes.string()
 }
 schemaPlugin.model('posts/:postid/comments', fields)
 
 async function test(){
-    let post = firebase.firestore().doc('posts/4o6VxumWTciSYVUdqSu7')
-    const snap = await post.get()
-    return snap.data()
+    return (await firebase.firestore()
+        .collection('posts')
+        .doc('4o6VxumWTciSYVUdqSu7')
+        .get()).data()
+
+    // const snap = await post.get()
 }
 
-test()
-    .then(val => console.log(val))
-    .catch( e => console.log(e.message))
+test().then(val => console.log(val))
