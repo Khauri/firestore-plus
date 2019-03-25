@@ -50,7 +50,7 @@ export class SchemaPlugin extends FirestorePlusPlugin {
                 if(!schema){
                     return resolve(data)
                 }
-                return resolve(schema.validate(data, { strict : true }))
+                return resolve(schema.validate(data))
             },
             // Validates the data before setting
             [PluginTargets.DocumentReference('set', true)] : async (chain) => {
@@ -63,7 +63,7 @@ export class SchemaPlugin extends FirestorePlusPlugin {
                 if(!schema){
                     return next()
                 }
-                args[0] = schema.validate(args[0], { strict : true })
+                args[0] = schema.validate(args[0])
                 return next(args)
             },
             // Validates the data before updating
@@ -81,7 +81,7 @@ export class SchemaPlugin extends FirestorePlusPlugin {
                     // alternating syntax not currently supported so just continue
                     return next()
                 }
-                args[0] = schema.validate(args[0], { strict : true })
+                args[0] = schema.validate(args[0])
                 return next(args)
             }
         }

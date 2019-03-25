@@ -30,7 +30,7 @@ export class Schema {
      */
     static preValidate(data){}
 
-    static validate(obj={}, options={}){
+    static validate(obj={}, options={ strict : true }){
         obj = getFirstObject(this.preValidate(obj), obj)
         const dataToValidate = {
             ...this.defaultFields,
