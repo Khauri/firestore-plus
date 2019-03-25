@@ -19,9 +19,17 @@ const getCollectionPath = (path) => {
 }
 
 export class SchemaPlugin extends FirestorePlusPlugin {
-    constructor({ autoValidate = true } = {}){
+    constructor({ 
+        autoValidate = true, 
+        validateOnSet = true, 
+        validateOnData = true, 
+        validateOnUpdate = true 
+    } = {}){
         super()
         this.autoValidate = autoValidate
+        this.validateOnSet = validateOnSet
+        this.validateOnData = validateOnData
+        this.validateOnUpdate = validateOnUpdate
         this.schema = {}
     }
     get defaultName(){
@@ -41,7 +49,7 @@ export class SchemaPlugin extends FirestorePlusPlugin {
              */
             [PluginTargets.DocumentSnapshot('data')] : (chain) => {
                 const { wrapped, context, args, next, resolve } = chain
-                if(this.autoValidate === false){
+                if(this.autoValidate === false || this.validateOnData === false){
                     return next()
                 }
                 const data = args[0] || wrapped.call(context)
@@ -55,7 +63,7 @@ export class SchemaPlugin extends FirestorePlusPlugin {
             // Validates the data before setting
             [PluginTargets.DocumentReference('set', true)] : async (chain) => {
                 const { context, args, next } = chain
-                if(this.autoValidate === false){
+                if(this.autoValidate === false || this.validateOnSet === false){
                     return next()
                 }
                 const path = context.path 
@@ -69,7 +77,7 @@ export class SchemaPlugin extends FirestorePlusPlugin {
             // Validates the data before updating
             [PluginTargets.DocumentReference('update', true)] : async (chain) => {
                 const { context, args, next } = chain
-                if(this.autoValidate === false){
+                if(this.autoValidate === false || this.validateOnUpdate === false){
                     return next()
                 }
                 const path = context.path 

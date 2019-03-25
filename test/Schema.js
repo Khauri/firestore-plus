@@ -142,7 +142,7 @@ describe('Schema Tests', function(){
                 return true
             })
 
-            it("is called with DocumentReeference#update", async function(){
+            it("is called with DocumentReference#update", async function(){
                 /** @type {SinonSandbox} */
                 const sandbox = this.sandbox
                 // Spy on the validate function
